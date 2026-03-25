@@ -1,0 +1,70 @@
+{
+  "name": "agent-trace-replay",
+  "version": "1.0.0",
+  "description": "Lets you investigate, understand, and replay your AI agent's reasoning. When your bot gives a wrong answer, you can ask what happened in plain English, understand why the LLM said what it said, and ask what would have happened if something had been different.",
+  "author": "your-name",
+  "entry": "dist/server.js",
+  "port": 3003,
+  "tools": [
+    {
+      "name": "show-trace",
+      "description": "Use this whenever the user asks what happened, what their bot said, what the agent did, or wants to see a trace. Examples: 'what happened with my hotel bot?', 'my concierge gave wrong info', 'show me what the bot said to a guest', 'what did the agent do?', 'my bot gave the wrong answer', 'what was the last thing my agent did?'",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "What the user said — their natural language description of the interaction, or a run_id if they have one"
+          }
+        },
+        "required": ["query"]
+      }
+    },
+    {
+      "name": "diagnose",
+      "description": "Use this when the user wants to understand *why* something went wrong, wants a root cause, wants an explanation, or asks why the bot said something incorrect. Examples: 'why did my bot say that?', 'why is it giving the wrong policy?', 'what caused this?', 'explain what went wrong', 'why did the agent reason this way?', 'what's the root cause?'",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "The user's natural language description of the issue"
+          }
+        },
+        "required": ["query"]
+      }
+    },
+    {
+      "name": "replay",
+      "description": "Use this when the user asks what *would have happened* if something were different, wants to test a change, or asks to rerun with different information. Examples: 'what would have happened if it used the correct policy?', 'what if the cancellation window was 24 hours?', 'rerun with the updated info', 'what would the bot have said if it knew the right answer?', 'run it again with the fix'",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "The user's description of which trace to replay"
+          },
+          "change": {
+            "type": "string",
+            "description": "What the user wants to change — in plain English, e.g. 'use 24 hours instead of 48' or 'use the updated cancellation policy'"
+          }
+        },
+        "required": ["query", "change"]
+      }
+    },
+    {
+      "name": "compare",
+      "description": "Use this when the user wants to see the difference between what happened and what would have happened, wants a before/after, or asks how the response changed. Examples: 'show me the difference', 'how did the answer change?', 'before and after', 'compare the two', 'what changed when you replayed it?'",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "The user's description of which trace to compare"
+          }
+        },
+        "required": ["query"]
+      }
+    }
+  ]
+}

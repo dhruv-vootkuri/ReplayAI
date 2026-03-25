@@ -1,0 +1,16 @@
+{
+  "name": "agent-trace-replay",
+  "version": "1.0.0",
+  "description": "OpenClaw skill for AI agent trace replay and debugging",
+  "scripts": {
+    "dev": "concurrently \"npm run dev:agent\" \"npm run dev:webapp\" \"npm run dev:skill\"",
+    "dev:agent": "cd support-agent && node index.js",
+    "dev:webapp": "cd webapp && node server.js",
+    "dev:skill": "cd skill && npm run dev",
+    "install:all": "npm install && cd support-agent && npm install && cd ../skill && npm install && cd ../webapp && npm install",
+    "build:skill": "cd skill && npm run build"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}

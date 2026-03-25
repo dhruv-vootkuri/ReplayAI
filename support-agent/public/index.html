@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>The Grand Hotel — Virtual Concierge</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: #0f1117;
+      color: #f1f5f9;
+      font-family: 'Georgia', 'Times New Roman', serif;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    header {
+      width: 100%;
+      background: linear-gradient(135deg, #1a1205 0%, #2d1f0a 100%);
+      border-bottom: 1px solid #8b6914;
+      padding: 20px 24px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .hotel-crest {
+      font-size: 28px;
+      filter: drop-shadow(0 0 8px #d4a01744);
+    }
+
+    .hotel-name h1 {
+      font-size: 20px;
+      font-weight: 400;
+      color: #d4a017;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+    }
+    .hotel-name p {
+      font-size: 11px;
+      color: #92714a;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      margin-top: 2px;
+    }
+
+    .concierge-status {
+      margin-left: auto;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      color: #92714a;
+      font-family: -apple-system, sans-serif;
+    }
+    .status-dot {
+      width: 7px; height: 7px; border-radius: 50%;
+      background: #22c55e;
+      box-shadow: 0 0 6px #22c55e88;
+      animation: pulse 2.5s ease-in-out infinite;
+    }
+    @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
+
+    .chat-area {
+      flex: 1;
+      width: 100%;
+      max-width: 680px;
+      overflow-y: auto;
+      padding: 32px 20px 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+      scroll-behavior: smooth;
+    }
+    .chat-area::-webkit-scrollbar { width: 4px; }
+    .chat-area::-webkit-scrollbar-thumb { background: #2d1f0a; border-radius: 4px; }
+
+    /* Welcome card */
+    .welcome-card {
+      background: linear-gradient(135deg, #1a1205, #2d1f0a);
+      border: 1px solid #8b691444;
+      border-radius: 12px;
+      padding: 24px;
+      text-align: center;
+    }
+    .welcome-card .icon { font-size: 36px; margin-bottom: 12px; }
+    .welcome-card h2 { font-size: 16px; font-weight: 400; color: #d4a017; letter-spacing: 0.08em; margin-bottom: 8px; }
+    .welcome-card p { font-size: 13px; color: #92714a; line-height: 1.7; font-family: -apple-system, sans-serif; }
+
+    .message {
+      display: flex;
+      gap: 12px;
+      animation: slideUp 0.22s ease-out;
+    }
+    @keyframes slideUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+
+    .message.guest { flex-direction: row-reverse; }
+
+    .avatar {
+      width: 34px; height: 34px;
+      border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 15px;
+      flex-shrink: 0;
+    }
+    .avatar.concierge { background: linear-gradient(135deg, #2d1f0a, #8b6914); }
+    .avatar.guest { background: #1e293b; color: #64748b; font-family: -apple-system, sans-serif; font-size: 12px; font-weight: 600; }
+
+    .bubble {
+      max-width: 78%;
+      padding: 13px 16px;
+      border-radius: 12px;
+      font-size: 14px;
+      line-height: 1.7;
+      font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+    }
+    .message.concierge .bubble {
+      background: #1a1d2e;
+      border: 1px solid #2d3154;
+      border-top-left-radius: 4px;
+      color: #e2e8f0;
+    }
+    .message.guest .bubble {
+      background: #2d1f0a;
+      border: 1px solid #8b691455;
+      border-top-right-radius: 4px;
+      color: #fef3c7;
+    }
+
+    .typing {
+      display: flex;
+      gap: 12px;
+    }
+    .typing-dots {
+      background: #1a1d2e;
+      border: 1px solid #2d3154;
+      border-radius: 12px;
+      border-top-left-radius: 4px;
+      padding: 13px 16px;
+      display: flex;
+      gap: 5px;
+      align-items: center;
+    }
+    .typing-dots span {
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: #8b6914;
+      animation: bounce 1.3s ease-in-out infinite;
+    }
+    .typing-dots span:nth-child(2) { animation-delay: 0.2s; }
+    .typing-dots span:nth-child(3) { animation-delay: 0.4s; }
+    @keyframes bounce { 0%,80%,100% { transform: translateY(0); } 40% { transform: translateY(-5px); } }
+
+    .input-area {
+      width: 100%;
+      max-width: 680px;
+      padding: 12px 20px 28px;
+      border-top: 1px solid #2d1f0a;
+    }
+
+    .suggestions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-bottom: 12px;
+    }
+    .chip {
+      background: #1a1205;
+      border: 1px solid #8b691433;
+      color: #92714a;
+      padding: 4px 12px;
+      border-radius: 16px;
+      font-size: 12px;
+      cursor: pointer;
+      font-family: -apple-system, sans-serif;
+      transition: all 0.15s;
+    }
+    .chip:hover { border-color: #d4a017; color: #d4a017; }
+
+    .input-row { display: flex; gap: 8px; }
+
+    input[type="text"] {
+      flex: 1;
+      background: #1a1d2e;
+      border: 1px solid #2d3154;
+      border-radius: 10px;
+      color: #f1f5f9;
+      font-size: 14px;
+      padding: 11px 14px;
+      outline: none;
+      font-family: -apple-system, sans-serif;
+      transition: border-color 0.15s;
+    }
+    input[type="text"]::placeholder { color: #475569; }
+    input[type="text"]:focus { border-color: #8b6914; }
+
+    button {
+      background: linear-gradient(135deg, #8b6914, #d4a017);
+      border: none;
+      border-radius: 10px;
+      color: #0f1117;
+      font-size: 13px;
+      font-weight: 700;
+      padding: 11px 18px;
+      cursor: pointer;
+      font-family: -apple-system, sans-serif;
+      letter-spacing: 0.04em;
+      transition: opacity 0.15s;
+    }
+    button:hover { opacity: 0.9; }
+    button:disabled { opacity: 0.4; cursor: not-allowed; }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="hotel-crest">🏨</div>
+  <div class="hotel-name">
+    <h1>The Grand Hotel</h1>
+    <p>Virtual Concierge Service</p>
+  </div>
+  <div class="concierge-status">
+    <div class="status-dot"></div>
+    Concierge available
+  </div>
+</header>
+
+<div class="chat-area" id="chat">
+  <div class="welcome-card">
+    <div class="icon">🗝️</div>
+    <h2>Welcome to The Grand Hotel</h2>
+    <p>Good evening. How may I assist you today?<br/>
+    Whether you need help with a reservation, our amenities,<br/>
+    or have a question about your stay — I'm here to help.</p>
+  </div>
+</div>
+
+<div class="input-area">
+  <div class="suggestions">
+    <span class="chip" onclick="fill('I need to cancel my reservation for tomorrow')">Cancel reservation</span>
+    <span class="chip" onclick="fill('I was charged twice for my stay')">Billing issue</span>
+    <span class="chip" onclick="fill('What time is check-in?')">Check-in time</span>
+    <span class="chip" onclick="fill('Do you have a pool?')">Amenities</span>
+    <span class="chip" onclick="fill('Can I get a refund for my booking?')">Refund inquiry</span>
+  </div>
+  <div class="input-row">
+    <input id="msg" type="text" placeholder="How may I assist you today?" autocomplete="off" />
+    <button id="send-btn" onclick="send()">Send</button>
+  </div>
+</div>
+
+<script>
+  const chat = document.getElementById('chat');
+  const input = document.getElementById('msg');
+  const btn   = document.getElementById('send-btn');
+
+  input.addEventListener('keydown', e => { if (e.key === 'Enter') send(); });
+
+  function fill(text) {
+    input.value = text;
+    input.focus();
+  }
+
+  function addMsg(role, text) {
+    const div = document.createElement('div');
+    div.className = `message ${role}`;
+
+    const av = document.createElement('div');
+    av.className = `avatar ${role}`;
+    av.textContent = role === 'concierge' ? '🎩' : 'G';
+
+    const bub = document.createElement('div');
+    bub.className = 'bubble';
+    bub.textContent = text;
+
+    if (role === 'guest') {
+      div.appendChild(bub);
+      div.appendChild(av);
+    } else {
+      div.appendChild(av);
+      div.appendChild(bub);
+    }
+    chat.appendChild(div);
+    chat.scrollTop = chat.scrollHeight;
+  }
+
+  function showTyping() {
+    const div = document.createElement('div');
+    div.id = 'typing';
+    div.className = 'typing';
+    div.innerHTML = `<div class="avatar concierge">🎩</div><div class="typing-dots"><span></span><span></span><span></span></div>`;
+    chat.appendChild(div);
+    chat.scrollTop = chat.scrollHeight;
+  }
+
+  function hideTyping() {
+    document.getElementById('typing')?.remove();
+  }
+
+  async function send() {
+    const text = input.value.trim();
+    if (!text) return;
+    input.value = '';
+    btn.disabled = true;
+
+    addMsg('guest', text);
+    showTyping();
+
+    try {
+      const res = await fetch('/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: text }),
+      });
+      const data = await res.json();
+      hideTyping();
+      addMsg('concierge', data.response || 'I apologize, I was unable to process your request. Please try again.');
+    } catch {
+      hideTyping();
+      addMsg('concierge', 'I apologize for the inconvenience. Our system is temporarily unavailable. Please contact the front desk directly.');
+    } finally {
+      btn.disabled = false;
+      input.focus();
+    }
+  }
+</script>
+</body>
+</html>

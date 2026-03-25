@@ -1,0 +1,752 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ReplayAI — Trace Visualizer</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0f1117;
+      --card: #1a1d2e;
+      --border: #2d3154;
+      --success: #22c55e;
+      --error: #ef4444;
+      --warning: #f97316;
+      --text: #f1f5f9;
+      --muted: #94a3b8;
+      --accent: #6366f1;
+      --accent-dim: #312e81;
+    }
+
+    html, body { height: 100%; background: var(--bg); color: var(--text); font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; }
+
+    /* ── Layout ── */
+    .app { display: grid; grid-template-rows: 56px 1fr; height: 100vh; overflow: hidden; }
+
+    /* ── Header ── */
+    header {
+      background: var(--card);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      padding: 0 20px;
+      gap: 12px;
+      z-index: 10;
+    }
+    .logo { font-size: 20px; }
+    header h1 { font-size: 15px; font-weight: 700; color: var(--text); }
+    .header-meta { font-size: 12px; color: var(--muted); margin-left: 4px; }
+    .header-right { margin-left: auto; display: flex; align-items: center; gap: 12px; }
+
+    .run-selector {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 4px 10px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+    .run-selector input {
+      background: transparent;
+      border: none;
+      outline: none;
+      color: var(--text);
+      font-size: 12px;
+      font-family: 'JetBrains Mono', 'Fira Code', monospace;
+      width: 140px;
+    }
+    .run-selector button {
+      background: var(--accent);
+      border: none;
+      border-radius: 4px;
+      color: white;
+      padding: 2px 8px;
+      font-size: 11px;
+      cursor: pointer;
+    }
+
+    .live-dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: var(--success);
+      animation: pulse 2s ease-in-out infinite;
+    }
+    .live-dot.inactive { background: var(--border); animation: none; }
+    @keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:0.3; } }
+
+    /* ── Main grid ── */
+    .main { display: grid; grid-template-columns: 1fr 1fr 340px; overflow: hidden; }
+
+    /* ── Trace panels ── */
+    .trace-panel {
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .trace-panel:last-of-type { border-right: none; }
+
+    .panel-header {
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+    .panel-header h2 { font-size: 13px; font-weight: 600; }
+    .panel-meta { font-size: 11px; color: var(--muted); margin-left: auto; }
+
+    .panel-badge {
+      font-size: 10px;
+      padding: 2px 6px;
+      border-radius: 10px;
+      font-weight: 600;
+    }
+    .panel-badge.original { background: #1e1b4b; color: #818cf8; border: 1px solid #3730a3; }
+    .panel-badge.replay   { background: #14532d22; color: var(--success); border: 1px solid #16a34a55; }
+
+    .steps-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .steps-list::-webkit-scrollbar { width: 4px; }
+    .steps-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+    /* ── Step row ── */
+    .step-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 10px;
+      border-radius: 8px;
+      border: 1px solid transparent;
+      cursor: pointer;
+      transition: all 0.15s;
+      animation: fadeIn 0.25s ease-out;
+    }
+    @keyframes fadeIn { from { opacity:0; transform:translateX(-6px); } to { opacity:1; transform:translateX(0); } }
+
+    .step-row:hover, .step-row.selected {
+      background: var(--card);
+      border-color: var(--border);
+    }
+    .step-row.selected { border-color: var(--accent); }
+
+    .step-num {
+      font-size: 10px;
+      color: var(--muted);
+      font-family: monospace;
+      width: 20px;
+      flex-shrink: 0;
+      text-align: right;
+    }
+
+    .step-icon { font-size: 14px; flex-shrink: 0; }
+
+    .step-info { flex: 1; min-width: 0; }
+    .step-name { font-size: 12px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .step-sponsor { font-size: 10px; color: var(--muted); }
+
+    .step-duration {
+      font-size: 10px;
+      color: var(--muted);
+      font-family: monospace;
+      flex-shrink: 0;
+    }
+
+    .step-row.success .step-name { color: var(--text); }
+    .step-row.failed  .step-name { color: var(--error); }
+    .step-row.warning .step-name { color: var(--warning); }
+
+    .step-row.failed  { background: #7f1d1d11; }
+    .step-row.warning { background: #78350f11; }
+
+    .changed-marker {
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: var(--success);
+      flex-shrink: 0;
+    }
+
+    /* ── Empty state ── */
+    .empty-state {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      color: var(--muted);
+      text-align: center;
+      padding: 24px;
+    }
+    .empty-state .icon { font-size: 32px; margin-bottom: 4px; }
+    .empty-state p { font-size: 12px; line-height: 1.6; }
+
+    /* ── Detail panel ── */
+    .detail-panel {
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      background: var(--card);
+      border-left: 1px solid var(--border);
+    }
+
+    .detail-content {
+      flex: 1;
+      overflow-y: auto;
+      padding: 16px;
+    }
+    .detail-content::-webkit-scrollbar { width: 4px; }
+    .detail-content::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+    .detail-title { font-size: 13px; font-weight: 600; margin-bottom: 12px; }
+
+    .detail-section { margin-bottom: 16px; }
+    .detail-section h4 { font-size: 11px; color: var(--muted); font-weight: 500; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.05em; }
+
+    .json-block {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 10px;
+      font-family: 'JetBrains Mono', 'Fira Code', monospace;
+      font-size: 11px;
+      line-height: 1.5;
+      color: #a5b4fc;
+      overflow-x: auto;
+      white-space: pre-wrap;
+      word-break: break-all;
+      max-height: 200px;
+      overflow-y: auto;
+    }
+    .json-block::-webkit-scrollbar { width: 3px; height: 3px; }
+    .json-block::-webkit-scrollbar-thumb { background: var(--border); }
+
+    .meta-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 4px 0;
+      border-bottom: 1px solid var(--border);
+      font-size: 12px;
+    }
+    .meta-row:last-child { border-bottom: none; }
+    .meta-row .label { color: var(--muted); }
+    .meta-row .value { font-weight: 500; }
+    .meta-row .value.error  { color: var(--error); }
+    .meta-row .value.success{ color: var(--success); }
+    .meta-row .value.warning{ color: var(--warning); }
+
+    /* ── Sidebar / OpenClaw chat ── */
+    .sidebar {
+      display: flex;
+      flex-direction: column;
+      border-left: 1px solid var(--border);
+      background: var(--card);
+      overflow: hidden;
+    }
+
+    .sidebar-header {
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .sidebar-header h2 { font-size: 13px; font-weight: 600; }
+    .oc-badge {
+      background: linear-gradient(135deg, #6366f1, #8b5cf6);
+      color: white;
+      font-size: 10px;
+      padding: 1px 6px;
+      border-radius: 8px;
+      font-weight: 600;
+    }
+
+    .oc-messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .oc-messages::-webkit-scrollbar { width: 4px; }
+    .oc-messages::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+    .oc-msg {
+      font-size: 12px;
+      line-height: 1.6;
+      animation: fadeIn 0.2s ease-out;
+    }
+    .oc-msg.user { color: var(--muted); font-style: italic; }
+    .oc-msg.agent {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px;
+      color: var(--text);
+      white-space: pre-wrap;
+      font-family: 'JetBrains Mono', 'Fira Code', monospace;
+    }
+    .oc-msg.error { color: var(--error); }
+
+    .oc-examples {
+      padding: 8px 12px;
+      border-top: 1px solid var(--border);
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+    }
+    .oc-chip {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      color: var(--muted);
+      padding: 3px 8px;
+      border-radius: 12px;
+      font-size: 10px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .oc-chip:hover { border-color: var(--accent); color: var(--text); }
+
+    .oc-input-area { padding: 10px 12px; border-top: 1px solid var(--border); }
+    .oc-input-row { display: flex; gap: 6px; }
+    .oc-input-row input {
+      flex: 1;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text);
+      font-size: 12px;
+      padding: 8px 10px;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    .oc-input-row input:focus { border-color: var(--accent); }
+    .oc-input-row input::placeholder { color: #475569; }
+    .oc-input-row button {
+      background: var(--accent);
+      border: none;
+      border-radius: 8px;
+      color: white;
+      padding: 8px 12px;
+      font-size: 12px;
+      cursor: pointer;
+      transition: background 0.15s;
+      white-space: nowrap;
+    }
+    .oc-input-row button:hover { background: #4f46e5; }
+    .oc-input-row button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    /* ── Sponsor badges ── */
+    .sponsor-tag {
+      display: inline-block;
+      padding: 1px 5px;
+      border-radius: 4px;
+      font-size: 9px;
+      font-weight: 600;
+      margin-left: 4px;
+    }
+    .sp-friendli   { background: #1e3a5f; color: #60a5fa; }
+    .sp-redis      { background: #3b0f0f; color: #f87171; }
+    .sp-contextual { background: #1a2e1a; color: #4ade80; }
+    .sp-civic      { background: #2d1b4e; color: #c4b5fd; }
+    .sp-apify      { background: #3b2200; color: #fb923c; }
+
+    /* ── Loading skeleton ── */
+    .skeleton {
+      background: linear-gradient(90deg, var(--card) 25%, var(--border) 50%, var(--card) 75%);
+      background-size: 200% 100%;
+      animation: shimmer 1.5s infinite;
+      border-radius: 4px;
+      height: 36px;
+      margin-bottom: 4px;
+    }
+    @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+  </style>
+</head>
+<body>
+<div class="app">
+
+  <!-- ── Header ────────────────────────────────────────────── -->
+  <header>
+    <div class="logo">⚡</div>
+    <h1>ReplayAI</h1>
+    <span class="header-meta">trace visualizer</span>
+    <div class="header-right">
+      <div class="run-selector">
+        <span>Run:</span>
+        <input type="text" id="run-id-input" placeholder="run_cs_4821" />
+        <button onclick="loadTrace()">Load</button>
+      </div>
+      <div class="live-dot" id="live-dot" title="Auto-polling"></div>
+    </div>
+  </header>
+
+  <!-- ── Main ──────────────────────────────────────────────── -->
+  <div class="main">
+
+    <!-- Original trace -->
+    <div class="trace-panel" id="panel-original">
+      <div class="panel-header">
+        <span class="panel-badge original">ORIGINAL</span>
+        <h2>Original Trace</h2>
+        <span class="panel-meta" id="original-meta">—</span>
+      </div>
+      <div class="steps-list" id="original-steps">
+        <div class="empty-state">
+          <div class="icon">📭</div>
+          <p>No trace loaded.<br/>Send a message to the support<br/>agent on port 3001, then load<br/>the run_id here.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Replay trace -->
+    <div class="trace-panel" id="panel-replay">
+      <div class="panel-header">
+        <span class="panel-badge replay">REPLAY</span>
+        <h2>Replayed Trace</h2>
+        <span class="panel-meta" id="replay-meta">—</span>
+      </div>
+      <div class="steps-list" id="replay-steps">
+        <div class="empty-state">
+          <div class="icon">🔁</div>
+          <p>No replay yet.<br/>Ask OpenClaw:<br/><em>"replay from step 5, fix retrieval"</em></p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Detail panel -->
+    <div class="detail-panel">
+      <div class="panel-header">
+        <h2>Step Detail</h2>
+      </div>
+      <div class="detail-content" id="detail-content">
+        <div class="empty-state">
+          <div class="icon">👆</div>
+          <p>Click any step to see full input/output details</p>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+</div>
+
+<!-- OpenClaw sidebar overlay -->
+<div style="position:fixed; right:0; top:56px; bottom:0; width:340px; display:flex; flex-direction:column; background:var(--card); border-left:1px solid var(--border); z-index:5;">
+  <div class="sidebar-header">
+    <h2>Ask OpenClaw</h2>
+    <span class="oc-badge">AI</span>
+  </div>
+  <div class="oc-messages" id="oc-messages">
+    <div class="oc-msg agent">👋 Hi! I can help you analyze, diagnose, and replay traces.
+
+Try one of the examples below, or type your own command.</div>
+  </div>
+  <div class="oc-examples">
+    <span class="oc-chip" onclick="ocFill('show me trace run_cs_4821')">show trace</span>
+    <span class="oc-chip" onclick="ocFill('diagnose this failure')">diagnose</span>
+    <span class="oc-chip" onclick="ocFill('replay from step 5, fix the retrieval')">replay</span>
+    <span class="oc-chip" onclick="ocFill('compare original vs replay')">compare</span>
+  </div>
+  <div class="oc-input-area">
+    <div class="oc-input-row">
+      <input type="text" id="oc-input" placeholder="Ask OpenClaw about this trace…" autocomplete="off" />
+      <button id="oc-send" onclick="sendOcMessage()">Ask →</button>
+    </div>
+  </div>
+</div>
+
+<!-- Adjust main layout to account for sidebar -->
+<style>
+  .main { grid-template-columns: 1fr 1fr 0 !important; }
+  .detail-panel { display: none !important; }
+</style>
+
+<script>
+  // ─── State ───────────────────────────────────────────────────────────────
+  let currentRunId = null;
+  let currentData = null;
+  let pollInterval = null;
+  let selectedStep = null;
+
+  // ─── Init ─────────────────────────────────────────────────────────────────
+  window.addEventListener('DOMContentLoaded', () => {
+    const params = new URLSearchParams(window.location.search);
+    const runId = params.get('run_id');
+    if (runId) {
+      document.getElementById('run-id-input').value = runId;
+      loadTrace(runId);
+    } else {
+      fetchLatest();
+    }
+    startPolling();
+
+    document.getElementById('oc-input').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') sendOcMessage();
+    });
+    document.getElementById('run-id-input').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') loadTrace();
+    });
+  });
+
+  // ─── Load trace ────────────────────────────────────────────────────────────
+  async function loadTrace(runId) {
+    const id = runId || document.getElementById('run-id-input').value.trim();
+    if (!id) return;
+    currentRunId = id;
+    document.getElementById('run-id-input').value = id;
+    await fetchAndRender(id);
+  }
+
+  async function fetchLatest() {
+    try {
+      const res = await fetch('/latest');
+      const data = await res.json();
+      if (data.run_id) {
+        document.getElementById('run-id-input').value = data.run_id;
+        await loadTrace(data.run_id);
+      }
+    } catch {}
+  }
+
+  async function fetchAndRender(runId) {
+    try {
+      const res = await fetch(`/trace/${runId}`);
+      if (!res.ok) return;
+      const data = await res.json();
+      currentData = data;
+      renderTrace(data);
+    } catch (err) {
+      console.error('Fetch error:', err);
+    }
+  }
+
+  // ─── Polling ───────────────────────────────────────────────────────────────
+  function startPolling() {
+    clearInterval(pollInterval);
+    pollInterval = setInterval(async () => {
+      if (!currentRunId) return;
+      const dot = document.getElementById('live-dot');
+      dot.classList.remove('inactive');
+      await fetchAndRender(currentRunId);
+    }, 2000);
+  }
+
+  // ─── Render ────────────────────────────────────────────────────────────────
+  function renderTrace(data) {
+    renderSteps('original-steps', data.steps, data.metadata, false, data.replay_steps);
+    renderMeta('original-meta', data.metadata, data.steps);
+
+    if (data.has_replay && data.replay_steps.length) {
+      renderSteps('replay-steps', data.replay_steps, data.metadata, true, data.steps);
+      renderMeta('replay-meta', null, data.replay_steps);
+    }
+  }
+
+  function renderMeta(elId, metadata, steps) {
+    const el = document.getElementById(elId);
+    const total = steps.reduce((s, x) => s + (x.duration_ms || 0), 0);
+    const failed = steps.filter(s => s.status === 'failed').length;
+    const statusText = failed > 0 ? `❌ ${failed} failed` : '✅ passed';
+    el.textContent = `${(total/1000).toFixed(1)}s · ${statusText}`;
+  }
+
+  function renderSteps(elId, steps, metadata, isReplay, otherSteps) {
+    const container = document.getElementById(elId);
+    if (!steps || !steps.length) return;
+    container.innerHTML = '';
+
+    for (const step of steps) {
+      const el = createStepRow(step, isReplay, otherSteps, metadata);
+      container.appendChild(el);
+    }
+  }
+
+  function createStepRow(step, isReplay, otherSteps, metadata) {
+    const row = document.createElement('div');
+    row.className = `step-row ${step.status}`;
+    row.dataset.stepNumber = step.step_number;
+
+    const icon = statusIcon(step.status);
+    const sponsor = step.sponsor;
+    const spClass = sponsorClass(sponsor);
+    const isFailurePoint = metadata?.failure_point === step.step_number;
+
+    // Check if this step changed in replay
+    const changed = isReplay && otherSteps
+      ? JSON.stringify(step.output) !== JSON.stringify(otherSteps.find(s => s.step_number === step.step_number)?.output)
+      : false;
+
+    row.innerHTML = `
+      <span class="step-num">${step.step_number}</span>
+      <span class="step-icon">${icon}</span>
+      <div class="step-info">
+        <div class="step-name">${step.name}${isFailurePoint ? ' <span style="color:var(--error);font-size:9px;font-weight:700;">FAIL</span>' : ''}</div>
+        <div class="step-sponsor"><span class="sponsor-tag ${spClass}">${sponsor}</span> · ${step.type}</div>
+      </div>
+      <span class="step-duration">${step.duration_ms}ms</span>
+      ${changed ? '<div class="changed-marker" title="Changed in replay"></div>' : ''}
+    `;
+
+    row.addEventListener('click', () => showDetail(step, isReplay, otherSteps));
+    return row;
+  }
+
+  function showDetail(step, isReplay, otherSteps) {
+    // Highlight selected
+    document.querySelectorAll('.step-row').forEach(r => r.classList.remove('selected'));
+    document.querySelectorAll(`[data-step-number="${step.step_number}"]`).forEach(r => r.classList.add('selected'));
+
+    const container = document.getElementById('detail-content');
+    const other = otherSteps?.find(s => s.step_number === step.step_number);
+
+    // Show in OC sidebar instead of detail panel
+    const hasChange = other && JSON.stringify(step.output) !== JSON.stringify(other.output);
+
+    const titleSuffix = isReplay ? ' (Replay)' : ' (Original)';
+    let html = `
+      <div class="detail-title">Step ${step.step_number}: ${step.name}${titleSuffix}</div>
+      <div class="detail-section">
+        <div class="meta-row"><span class="label">Status</span><span class="value ${step.status}">${step.status}</span></div>
+        <div class="meta-row"><span class="label">Sponsor</span><span class="value">${step.sponsor}</span></div>
+        <div class="meta-row"><span class="label">Type</span><span class="value">${step.type}</span></div>
+        <div class="meta-row"><span class="label">Duration</span><span class="value">${step.duration_ms}ms</span></div>
+        <div class="meta-row"><span class="label">Timestamp</span><span class="value" style="font-size:10px;">${new Date(step.timestamp).toLocaleTimeString()}</span></div>
+      </div>
+      <div class="detail-section">
+        <h4>Input</h4>
+        <div class="json-block">${escapeHtml(JSON.stringify(step.input, null, 2))}</div>
+      </div>
+      <div class="detail-section">
+        <h4>Output</h4>
+        <div class="json-block">${escapeHtml(JSON.stringify(step.output, null, 2))}</div>
+      </div>
+    `;
+
+    if (hasChange && other) {
+      html += `
+        <div class="detail-section">
+          <h4>⚡ Replay Change</h4>
+          <div class="json-block">${escapeHtml(JSON.stringify(other.output, null, 2))}</div>
+        </div>
+      `;
+    }
+
+    container.innerHTML = html;
+
+    // Show in OC messages panel too
+    appendOcMsg(`📍 Step ${step.step_number}: ${step.name}
+Status: ${step.status} | ${step.duration_ms}ms
+Sponsor: ${step.sponsor}${step.output.error ? '\nError: ' + step.output.error : ''}`, 'agent');
+  }
+
+  // ─── OpenClaw ──────────────────────────────────────────────────────────────
+  function ocFill(text) {
+    const runId = currentRunId || document.getElementById('run-id-input').value.trim();
+    let filled = text;
+    // Replace generic "run_cs_4821" with actual if available
+    if (runId && !filled.includes(runId)) {
+      filled = filled.replace(/run_cs_\d+/, runId);
+    }
+    document.getElementById('oc-input').value = filled;
+    document.getElementById('oc-input').focus();
+  }
+
+  function appendOcMsg(text, type) {
+    const container = document.getElementById('oc-messages');
+    const msg = document.createElement('div');
+    msg.className = `oc-msg ${type}`;
+    msg.textContent = text;
+    container.appendChild(msg);
+    container.scrollTop = container.scrollHeight;
+  }
+
+  function showOcTyping() {
+    const container = document.getElementById('oc-messages');
+    const el = document.createElement('div');
+    el.id = 'oc-typing';
+    el.className = 'oc-msg agent';
+    el.textContent = '…';
+    el.style.opacity = '0.5';
+    container.appendChild(el);
+    container.scrollTop = container.scrollHeight;
+  }
+
+  function hideOcTyping() {
+    document.getElementById('oc-typing')?.remove();
+  }
+
+  async function sendOcMessage() {
+    const input = document.getElementById('oc-input');
+    const btn = document.getElementById('oc-send');
+    const text = input.value.trim();
+    if (!text) return;
+
+    input.value = '';
+    btn.disabled = true;
+    appendOcMsg(`> ${text}`, 'user');
+    showOcTyping();
+
+    try {
+      const res = await fetch('/openclaw', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: text }),
+      });
+      const data = await res.json();
+      hideOcTyping();
+      appendOcMsg(data.output || JSON.stringify(data), 'agent');
+
+      // Auto-refresh trace if a replay was triggered
+      if (text.toLowerCase().includes('replay') && currentRunId) {
+        setTimeout(() => fetchAndRender(currentRunId), 1500);
+      }
+    } catch (err) {
+      hideOcTyping();
+      appendOcMsg(`Error: ${err.message}`, 'error');
+    } finally {
+      btn.disabled = false;
+      input.focus();
+    }
+  }
+
+  // ─── Utils ─────────────────────────────────────────────────────────────────
+  function statusIcon(status) {
+    switch(status) {
+      case 'success': return '✅';
+      case 'failed':  return '❌';
+      case 'warning': return '⚠️';
+      default:        return '⬜';
+    }
+  }
+
+  function sponsorClass(sponsor) {
+    switch(sponsor) {
+      case 'FriendliAI':  return 'sp-friendli';
+      case 'Redis':       return 'sp-redis';
+      case 'ContextualAI':return 'sp-contextual';
+      case 'Civic':       return 'sp-civic';
+      case 'Apify':       return 'sp-apify';
+      default:            return '';
+    }
+  }
+
+  function escapeHtml(str) {
+    return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+</script>
+</body>
+</html>
